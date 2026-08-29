@@ -1,0 +1,7 @@
+torch
+torchvision
+timm
+facenet-pytorch
+tqdm
+Pillow
+kaggle

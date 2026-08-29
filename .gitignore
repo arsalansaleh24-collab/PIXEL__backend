@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+*.pth
+data/raw/
+data/cropped/
+kaggle_download/
+kaggle_dl_temp/
+temp_face.*
+setup_test_data.py
+.kaggle/
+.DS_Store
