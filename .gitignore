@@ -11,3 +11,4 @@ temp_face.*
 setup_test_data.py
 .kaggle/
 .DS_Store
+node_modules/
