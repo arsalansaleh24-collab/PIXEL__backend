@@ -9,41 +9,7 @@ from torchvision import transforms
 from facenet_pytorch import MTCNN
 from models import DEVICE
 
-# cnn + lstm architecture
-class VideoTemporalModel(nn.Module):
-    def __init__(self, cnn_backbone='efficientnet_b4', hidden_dim=256, num_layers=1, num_classes=2):
-        super().__init__()
-        # load cnn backbone but drop the classification head so it outputs raw features
-        self.cnn = timm.create_model(cnn_backbone, pretrained=True, num_classes=0)
-        cnn_out_dim = self.cnn.num_features
-        
-        self.lstm = nn.LSTM(
-            input_size=cnn_out_dim, 
-            hidden_size=hidden_dim, 
-            num_layers=num_layers, 
-            batch_first=True
-        )
-        self.fc = nn.Linear(hidden_dim, num_classes)
-        
-    def forward(self, x):
-        # expects shape: (batch, frames, c, h, w)
-        batch_size, seq_length, c, h, w = x.size()
-        
-        # flatten batch and seq so we can pass everything through cnn at once
-        x = x.view(batch_size * seq_length, c, h, w)
-        features = self.cnn(x)
-        
-        # put the sequence dimension back
-        features = features.view(batch_size, seq_length, -1)
-        
-        # run through lstm
-        lstm_out, (h_n, c_n) = self.lstm(features)
-        
-        # just grab the final hidden state to classify the whole vid
-        last_hidden = h_n[-1] # shape: (Batch, hidden_dim)
-        
-        out = self.fc(last_hidden)
-        return out
+from models.video_model import DeepfakeVideoDetector
 
 VIDEO_WEIGHTS_PATH = Path(__file__).parent / "best_video_lstm.pth"
 
@@ -53,7 +19,7 @@ _mtcnn = None
 def _get_video_model():
     global _video_model
     if _video_model is None:
-        _video_model = VideoTemporalModel()
+        _video_model = DeepfakeVideoDetector()
         
         if VIDEO_WEIGHTS_PATH.exists():
             state = torch.load(VIDEO_WEIGHTS_PATH, map_location=DEVICE, weights_only=True)
@@ -69,17 +35,13 @@ def _get_video_model():
 def _get_mtcnn():
     global _mtcnn
     if _mtcnn is None:
-        # use cpu for mtcnn even if we have gpu
-        _mtcnn = MTCNN(image_size=224, margin=20, keep_all=False, select_largest=True, device='cpu')
+        # use cpu for mtcnn even if we have gpu, must match training args exactly
+        _mtcnn = MTCNN(image_size=224, margin=20, keep_all=False, select_largest=True, post_process=False, device='cpu')
     return _mtcnn
 
-_transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-])
+_transform = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
-def _sample_frames(video_path, num_frames=32):
+def _sample_frames(video_path, num_frames=8):
     """grab evenly spaced frames from the video"""
     cap = cv2.VideoCapture(video_path)
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -89,8 +51,11 @@ def _sample_frames(video_path, num_frames=32):
         return []
     
     # pick frame indices evenly across the video
-    num_frames = min(num_frames, total)
-    indices = np.linspace(0, total - 1, num_frames, dtype=int)
+    if total >= num_frames:
+        indices = np.linspace(0, total - 1, num_frames, dtype=int)
+    else:
+        # pad short vids with the last frame
+        indices = list(range(total)) + [total - 1] * (num_frames - total)
     
     frames = []
     for idx in indices:
@@ -111,7 +76,7 @@ def analyze_video(video_path):
     model = _get_video_model()
     mtcnn = _get_mtcnn()
     
-    frames = _sample_frames(video_path, num_frames=32)
+    frames = _sample_frames(video_path, num_frames=8)
     
     if not frames:
         return {
@@ -130,20 +95,19 @@ def analyze_video(video_path):
         try:
             face = mtcnn(frame)
         except Exception:
-            continue
+            face = None
         
-        if face is None:
-            continue
-        
-        faces_found += 1
-        
-        # mtcnn returns tensor in [-1, 1], we need [0, 1] for our transforms
-        # re-normalize to imagenet stats
-        face_pil = transforms.ToPILImage()((face + 1) / 2)  # back to [0,1] then to pil
-        tensor = _transform(face_pil)
-        face_tensors.append(tensor)
+        if face is not None:
+            faces_found += 1
+            # mtcnn outputs 0-255 roughly (post_process=False), scale to 0-1
+            face = face / 255.0
+            tensor = _transform(face)
+            face_tensors.append(tensor)
+        else:
+            # pad with zeros to ensure sequence length remains exactly 8 (like in training)
+            face_tensors.append(torch.zeros(3, 224, 224))
     
-    if not face_tensors:
+    if faces_found == 0:
         return {
             'confidence': 0.5,
             'is_fake': False,

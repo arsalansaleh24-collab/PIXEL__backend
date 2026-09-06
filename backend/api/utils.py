@@ -6,20 +6,7 @@ def build_resp(res, is_vid):
     conf = res['confidence']
     conf_pct = round(conf * 100, 1)
     
-    # gray zone
-    if 0.4 <= conf <= 0.6 and not res['is_fake']:
-        return {
-            "status": "UNCERTAIN",
-            "confidence_score": f"{conf_pct}%",
-            "details": {
-                "message": "not sure tbh",
-                "detector": res.get('detector', 'idk'),
-                "frames_analyzed": res.get('frames_analyzed', None),
-                "face_detected": "Yes" if res.get('face_detected') else "No",
-                "temporal_consistency": "Inconclusive" if is_vid else None
-            }
-        }
-    
+
     class_str = "DEEPFAKE" if res['is_fake'] else "AUTHENTIC"
     
     msg = "fake face found" if is_vid and res['is_fake'] else "ai pic detected" if res['is_fake'] else "looks real"
