@@ -128,12 +128,12 @@ def main():
             
             if val_acc > best_acc:
                 best_acc = val_acc
-                torch.save(model.state_dict(), "best_video_lstm.pth")
+                torch.save(model.state_dict(), os.path.join("models", "best_video_lstm.pth"))
                 print(f"-> Saved new best model with accuracy {best_acc:.2f}%")
         else:
             print("No validation data found.")
             # save anyway if we have no val data
-            torch.save(model.state_dict(), "best_video_lstm.pth")
+            torch.save(model.state_dict(), os.path.join("models", "best_video_lstm.pth"))
 
 if __name__ == '__main__':
     main()

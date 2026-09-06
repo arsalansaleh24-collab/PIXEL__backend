@@ -10,7 +10,7 @@ elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
 else:
     DEVICE = 'cpu'
 
-WEIGHTS_PATH = Path("deepfake_detector_b4.pth")
+WEIGHTS_PATH = Path(__file__).parent / "deepfake_detector_b4.pth"
 
 def load_model():
     """loads the efficientnet weights if they exist, otherwise returns None"""

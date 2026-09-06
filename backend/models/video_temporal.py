@@ -45,7 +45,7 @@ class VideoTemporalModel(nn.Module):
         out = self.fc(last_hidden)
         return out
 
-VIDEO_WEIGHTS_PATH = Path("deepfake_video_lstm.pth")
+VIDEO_WEIGHTS_PATH = Path(__file__).parent / "best_video_lstm.pth"
 
 _video_model = None
 _mtcnn = None
