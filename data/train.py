@@ -5,19 +5,28 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 from torch.amp import autocast, GradScaler
 from tqdm import tqdm
+import argparse
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--demo', action='store_true', help='run a quick demo training loop for CI/CD')
+    args = parser.parse_args()
+
     if torch.cuda.is_available():
         device = 'cuda'
     elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
         device = 'mps'
     else:
         device = 'cpu'
-    batch_size = 16 # fits in 8gb vram
-    epochs = 10
+        
+    # for demo, just run 1 epoch with small batch to finish in seconds
+    batch_size = 4 if args.demo else 16 
+    epochs = 1 if args.demo else 10
     lr = 1e-4
 
     print(f"using {device}")
+    if args.demo:
+        print("DEMO MODE: Running 1 fast epoch for CI/CD pipeline.")
 
     # basic augs fr trans
     train_transforms = transforms.Compose([
@@ -81,6 +90,10 @@ def main():
                 'loss': f"{loss.item():.4f}", 
                 'acc': f"{100.*correct/total:.1f}%"
             })
+            
+            # demo mode: only process one batch to prove it runs
+            if args.demo:
+                break
             
         epoch_acc = 100. * correct / total
         print(f"ep {epoch+1} | loss: {total_loss/len(train_loader):.4f} | acc: {epoch_acc:.2f}%")

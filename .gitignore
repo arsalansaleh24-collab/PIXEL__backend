@@ -2,10 +2,11 @@ venv/
 __pycache__/
 *.pyc
 *.pth
-data/raw/
-data/cropped/
+*.whl
+data/
 kaggle_download/
 kaggle_dl_temp/
+uploads/
 temp_face.*
 setup_test_data.py
 .kaggle/
