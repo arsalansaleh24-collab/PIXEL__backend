@@ -1,0 +1,47 @@
+name: Continuous Training (MLOps)
+
+on:
+  workflow_dispatch:
+    # Allows triggering this retraining pipeline manually from GitHub UI
+
+jobs:
+  retrain-model:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
+      - name: Generate Dummy Training Data
+        # Since we don't upload 10GB of Kaggle data to GitHub,
+        # we generate 50 dummy faces to prove the training script runs.
+        run: |
+          python setup_test_data.py
+          
+      - name: Run MTCNN Preprocessing
+        run: |
+          python data/preprocess.py
+          
+      - name: Train Model (Demo Mode)
+        # The --demo flag ensures it trains for exactly 1 epoch/1 batch
+        # so it finishes in a few seconds on the GitHub CPU.
+        run: |
+          python data/train.py --demo
+          
+      - name: Upload New Weights
+        uses: actions/upload-artifact@v3
+        with:
+          name: deepfake-model-weights
+          path: deepfake_detector_b4.pth
+          
+      - name: Finish
+        run: echo "Model successfully retrained and weights uploaded!"

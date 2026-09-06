@@ -1,0 +1,12 @@
+torch
+torchvision
+timm
+facenet-pytorch
+tqdm
+Pillow
+kaggle
+fastapi
+uvicorn
+python-multipart
+opencv-python
+pytest

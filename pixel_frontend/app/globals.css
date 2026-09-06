@@ -1,0 +1,37 @@
+/* Tailwind CSS v4 — all utility classes come from this import */
+@import "tailwindcss";
+
+/*
+  Dark mode uses a .dark class on <html> (toggled by the moon/sun button),
+  not only the computer's system setting.
+*/
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Shared colors used across the page */
+:root {
+  --background: #f4f6f8;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --muted: #64748b;
+  --primary: #1e3a8a;
+  --primary-hover: #1e40af;
+  --soft-blue: #dbeafe;
+}
+
+.dark {
+  --background: #0b1220;
+  --foreground: #e8eef7;
+  --card: #121a2b;
+  --border: #243049;
+  --muted: #94a3b8;
+  --primary: #93c5fd;
+  --primary-hover: #bfdbfe;
+  --soft-blue: #1e3a5f;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
