@@ -12,12 +12,14 @@ from models import DEVICE
 from models.video_model import DeepfakeVideoDetector
 
 VIDEO_WEIGHTS_PATH = Path(__file__).parent / "best_video_lstm.pth"
+VIDEO_CHECKPOINT_PATH = Path(__file__).parent / "best_video_lstm_checkpoint.pth"
 
 _video_model = None
 _mtcnn = None
+_best_threshold = 0.5  # default, overridden by checkpoint if available
 
 def _get_video_model():
-    global _video_model
+    global _video_model, _best_threshold
     if _video_model is None:
         _video_model = DeepfakeVideoDetector()
         
@@ -27,6 +29,15 @@ def _get_video_model():
             print(f"loaded weights from {VIDEO_WEIGHTS_PATH}")
         else:
             print(f"warning: {VIDEO_WEIGHTS_PATH} not found, using untrained model for video")
+        
+        # Load the optimal decision threshold from the training checkpoint
+        if VIDEO_CHECKPOINT_PATH.exists():
+            try:
+                ckpt = torch.load(VIDEO_CHECKPOINT_PATH, map_location='cpu', weights_only=False)
+                _best_threshold = ckpt.get('best_threshold', 0.5)
+                print(f"loaded best threshold from checkpoint: {_best_threshold:.4f}")
+            except Exception as e:
+                print(f"warning: couldn't load threshold from checkpoint: {e}")
             
         _video_model = _video_model.to(DEVICE)
         _video_model.eval()
@@ -77,6 +88,7 @@ def analyze_video(video_path):
     mtcnn = _get_mtcnn()
     
     frames = _sample_frames(video_path, num_frames=8)
+    print(f"[DEBUG] Sampled {len(frames)} frames from video")
     
     if not frames:
         return {
@@ -90,7 +102,7 @@ def analyze_video(video_path):
     face_tensors = []
     faces_found = 0
     
-    for frame in frames:
+    for i, frame in enumerate(frames):
         # try to get a face out of this frame
         try:
             face = mtcnn(frame)
@@ -100,12 +112,17 @@ def analyze_video(video_path):
         if face is not None:
             faces_found += 1
             # mtcnn outputs 0-255 roughly (post_process=False), scale to 0-1
+            print(f"[DEBUG] Frame {i}: face found, raw range [{face.min().item():.2f}, {face.max().item():.2f}]")
             face = face / 255.0
             tensor = _transform(face)
+            print(f"[DEBUG] Frame {i}: after norm range [{tensor.min().item():.2f}, {tensor.max().item():.2f}]")
             face_tensors.append(tensor)
         else:
             # pad with zeros to ensure sequence length remains exactly 8 (like in training)
+            print(f"[DEBUG] Frame {i}: no face, padding with zeros")
             face_tensors.append(torch.zeros(3, 224, 224))
+    
+    print(f"[DEBUG] Total faces found: {faces_found}/{len(frames)}")
     
     if faces_found == 0:
         return {
@@ -118,17 +135,27 @@ def analyze_video(video_path):
         
     # batch it up (batch size 1)
     batch_tensor = torch.stack(face_tensors).unsqueeze(0).to(DEVICE)
+    print(f"[DEBUG] Input tensor shape: {batch_tensor.shape}")
     
     with torch.no_grad():
         output = model(batch_tensor)
         probs = torch.softmax(output, dim=1)
-        
-    # class 0 = fake, class 1 = real
-    fake_prob = probs[0][0].item()
-    real_prob = probs[0][1].item()
     
-    is_fake = fake_prob > real_prob
+    print(f"[DEBUG] Raw logits: {output[0].tolist()}")
+    print(f"[DEBUG] Softmax probs: {probs[0].tolist()}")
+        
+    # class 0 = real, class 1 = fake
+    real_prob = probs[0][0].item()
+    fake_prob = probs[0][1].item()
+    
+    # Use the optimal threshold from training instead of a naive 0.5
+    # The training script grid-searched 99 thresholds on the validation set
+    # to find the one that maximizes F1 score
+    is_fake = fake_prob >= _best_threshold
     confidence = fake_prob if is_fake else real_prob
+    
+    print(f"[DEBUG] real_prob={real_prob:.4f}, fake_prob={fake_prob:.4f}, "
+          f"threshold={_best_threshold:.4f}, is_fake={is_fake}, confidence={confidence:.4f}")
     
     return {
         'confidence': confidence,
@@ -138,3 +165,4 @@ def analyze_video(video_path):
         'frames_analyzed': len(frames),
         'faces_found': faces_found
     }
+
