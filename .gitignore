@@ -1,7 +1,6 @@
 venv/
 __pycache__/
 *.pyc
-*.pth
 *.whl
 data/
 kaggle_download/
